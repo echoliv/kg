@@ -62,7 +62,7 @@ object specialSimilarityIntro {
     }
     val FilterModifWord = new StopRecognition()
     FilterModifWord.insertStopWords(stopwords)
-
+/*
 
 
     //根据停用词进行过滤
@@ -121,6 +121,6 @@ object specialSimilarityIntro {
     try { hdfs.delete(new org.apache.hadoop.fs.Path(save_file), true) } catch { case _ : Throwable => { } }
 
     similarities.filter(x => x._2 > 0.1).map( x => x._1._1 + "|" + x._1._2 + "|" + x._2).repartition(10).saveAsTextFile(save_file, classOf[GzipCodec])
-
+*/
   }
 }

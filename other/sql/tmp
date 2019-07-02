@@ -1,0 +1,46 @@
+select type,count(*),count(distinct(songid))
+from
+(select t22.songid,t21.userid,
+case when t22.publish_time=2019 then '2019'
+when t22.publish_time = 2018 then '2018'
+when t22.publish_time =2017 then '2017'
+when t22.publish_time between 2014 and 2016 then '2014-2016'
+when t22.publish_time between 2010 and 2013 then '2010-2013'
+when t22.publish_time between 2000 and 2009 then '2000-2009'
+when t22.publish_time <2000 then '2000以前'
+else '0' end as type
+from
+(select t2.songid ,t1.userid
+from
+(
+select i userid,split(sp,'::')[0] mixsongid
+from
+(
+select i,scid_albumid
+from
+ ddl.dt_list_ard_d
+where dt ='2019-06-20'
+and b='曝光' and (fo like '%首页/个性化推荐/歌单%' or fo like '/歌单/推荐%')
+and cast(i as int)>0
+)t0  lateral view explode(split(scid_albumid,',')) t as sp
+group by i,split(sp,'::')[0]
+)t1 join (select mixsongid,songid
+from
+analyse.lhy_st_k_compatible_song_new
+where dt='2019-06-20' group by mixsongid,songid
+)t2 on t1.mixsongid =t2.mixsongid
+group by t1.userid,t2.songid
+)t21 join (
+select songid,cast(publish_year as int) publish_time from
+analyse.ljm_fm_ctr_song_summary_figure where dt='2019-06-26'
+and cast(publish_year as int) >0
+)t22 on t21.songid =t22.songid
+group by t22.songid,t21.userid,case when t22.publish_time=2019 then '2019'
+when t22.publish_time = 2018 then '2018'
+when t22.publish_time =2017 then '2017'
+when t22.publish_time between 2014 and 2016 then '2014-2016'
+when t22.publish_time between 2010 and 2013 then '2010-2013'
+when t22.publish_time between 2000 and 2009 then '2000-2009'
+when t22.publish_time <2000 then '2000以前'
+else '0' end
+)t31 group by type ;;

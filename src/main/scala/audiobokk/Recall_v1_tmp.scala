@@ -50,8 +50,8 @@ object A_recall_v1 {
     val name_album_path="file\\audio\\name_album_path"
     val comple_path ="file\\audio\\comple_path"
     val input_path ="file\\audio\\input_path"
-
-    //召回池
+    val recommend_num =20
+    val min_num =20
     var similar_album = sc.textFile(similar_album_path).map{x=>x.split('|')}.map{x=>
       (x(0),x(1)+':'+x(2))
     }.reduceByKey((x,y)=>x+','+y).collect.toMap
@@ -120,7 +120,8 @@ object A_recall_v1 {
       val userid =x._1
       val albumidlist = x._2._1._1
       val scorelist = x._2._1._2
-      val filter = x._2._1._3
+      var filter = x._2._1._3
+
       val tagfeature = x._2._2.toString.replace("Some(","").replace(")","").split('=')
 
       var songlist2:scala.collection.mutable.Map[String, Double] = scala.collection.mutable.Map()
@@ -134,24 +135,35 @@ object A_recall_v1 {
           for(i1 <-0 to list1.length-1){
             val albumid = list1(i1).split(':')(0)
             val score = list1(i1).split(':')(1).toDouble
-            if(!songlist2.contains(albumid)) {
-              songlist2 += (albumid ->(1 - (scorelist(i) - 1) * 0.3)*score)
-            }else {
-              songlist2(albumid) = songlist2(albumid) *0.6 + (1 - (scorelist(i) - 1) * 0.3)*0.6*score
-            }
+            if(filter!=None) {
+              if (!filter.get.contains(albumid)) {
+                if (!songlist2.contains(albumid)) {
+                  songlist2 += (albumid -> (1 - (scorelist(i) - 1) * 0.3) * score)
+                } else {
+                  songlist2(albumid) = songlist2(albumid) * 0.6 + (1 - (scorelist(i) - 1) * 0.3) * 0.6 * score
+                }
+              }
+            }else
+              {
+                if (!songlist2.contains(albumid)) {
+                  songlist2 += (albumid -> (1 - (scorelist(i) - 1) * 0.3) * score)
+                } else {
+                  songlist2(albumid) = songlist2(albumid) * 0.6 + (1 - (scorelist(i) - 1) * 0.3) * 0.6 * score
+                }
+              }
           }
         }
       }
       val re = songlist2.toList.sortBy(-_._2).take(100).toArray
-      val result =get_recommend(re,tagfeature ,B_name_album.value,B_tag_album.value,B_comple.value)
+      val result =get_recommend(re,tagfeature ,B_name_album.value,B_tag_album.value,B_comple.value,recommend_num,min_num)
       (userid+'='+result.mkString(",").replace(",null",""))
     }.saveAsTextFile(input_path)
   }
 
-  def get_recommend(canditation: Array[(String, Double)], tagfeature: Array[String], name_album: Map[String, String], tag_album: Map[String, String],comple:Map[String,Array[String]]):Array[String]={
+  def get_recommend(canditation: Array[(String, Double)], tagfeature: Array[String], name_album: Map[String, String], tag_album: Map[String, String],comple:Map[String,Array[String]],recommend_num:Int,min_num:Int):Array[String]={
     var tagCount: scala.collection.mutable.Map[String, Int] = scala.collection.mutable.Map()
     var nameCount:scala.collection.mutable.Map[String, Int] = scala.collection.mutable.Map()
-    var songlist = new Array[String](20)
+    var songlist = new Array[String](recommend_num)
     var j =0
     var flag=true
     for(i<-0 to canditation.length-1 if flag) {
@@ -164,7 +176,7 @@ object A_recall_v1 {
           songlist(j) = canditation(i)._1+':'+canditation(i)._2.formatted("%.5f").toString
           j += 1
         } else {
-          if (nameCount(name) < 3) {
+          if (nameCount(name) < 2) {
             nameCount(name) += 1
             songlist(j) = canditation(i)._1+':'+canditation(i)._2.formatted("%.5f").toString
             j += 1
@@ -174,10 +186,10 @@ object A_recall_v1 {
         songlist(j) = canditation(i)._1+':'+canditation(i)._2.formatted("%.5f").toString
         j += 1
       }
-      if (j >= 20)
+      if (j >= recommend_num)
         flag = false
     }
-    if(j<10)
+    if(j<min_num)
     {
 
       var bigtag =0
@@ -185,8 +197,8 @@ object A_recall_v1 {
         if(tagfeature(bigtag).toDouble<tagfeature(t1).toDouble)
           bigtag =t1
       }
-      for(z<-0 to 10-j-1){
-        val rand1 = scala.util.Random.nextInt(45)
+      for(z<-0 to min_num-j-1){
+        val rand1 = scala.util.Random.nextInt(50)
         songlist(j) =comple(bigtag.toString)(rand1)+':'+'0'
       }
     }

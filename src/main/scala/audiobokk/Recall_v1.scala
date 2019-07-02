@@ -53,9 +53,9 @@ object Audio_recall_v1 {
     val input_path ="file\\audio\\input_path"
 */
 //召回池
-var similar_album = sc.textFile(similar_album_path).map{x=>x.split('|')}.map{x=>
-  (x(0),x(1)+':'+x(2))
-}.reduceByKey((x,y)=>x+','+y).collect.toMap
+    var similar_album = sc.textFile(similar_album_path).map{x=>x.split('|')}.map{x=>
+    (x(0),x(1)+':'+x(2))
+    }.reduceByKey((x,y)=>x+','+y).collect.toMap
     val B_similar = sc.broadcast(similar_album)
     similar_album=null
 
@@ -135,10 +135,21 @@ var similar_album = sc.textFile(similar_album_path).map{x=>x.split('|')}.map{x=>
           for(i1 <-0 to list1.length-1){
             val albumid = list1(i1).split(':')(0)
             val score = list1(i1).split(':')(1).toDouble
-            if(!songlist2.contains(albumid)) {
-              songlist2 += (albumid ->(1 - (scorelist(i) - 1) * 0.3)*score)
-            }else {
-              songlist2(albumid) = songlist2(albumid) *0.6 + (1 - (scorelist(i) - 1) * 0.3)*0.6*score
+            if(filter!=None) {
+              if (!filter.get.contains(albumid)) {
+                if (!songlist2.contains(albumid)) {
+                  songlist2 += (albumid -> (1 - (scorelist(i) - 1) * 0.3) * score)
+                } else {
+                  songlist2(albumid) = songlist2(albumid) * 0.6 + (1 - (scorelist(i) - 1) * 0.3) * 0.6 * score
+                }
+              }
+            }else
+            {
+              if (!songlist2.contains(albumid)) {
+                songlist2 += (albumid -> (1 - (scorelist(i) - 1) * 0.3) * score)
+              } else {
+                songlist2(albumid) = songlist2(albumid) * 0.6 + (1 - (scorelist(i) - 1) * 0.3) * 0.6 * score
+              }
             }
           }
         }
