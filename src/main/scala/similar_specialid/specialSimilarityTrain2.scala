@@ -52,11 +52,11 @@ object specialSimilarityTrain {
 
     val trainingSamples = sc.textFile(sample_file).map{ line =>
       val s = line.split('|')
-      val colle = s(2).split(',').map(x => x.toInt).toList
+      val colle = s(2).split(',').map(x => x).toList
       var label = 0.0
       var mark = 1.0
       val r = scala.util.Random
-      if (colle.contains(s(3).toInt)){
+      if (colle.contains(s(3))){
         label = 1.0
       } else {
         label = 0.0
@@ -64,7 +64,7 @@ object specialSimilarityTrain {
           mark = 0.0
         }
       }
-      (label,s.slice(4, s.size).map(_.toDouble),mark,s(1).toInt,s(3).toInt)
+      (label,s.slice(4, s.size).map(_.toDouble),mark,s(1),s(3))
     }.filter(x => x._3==1.0).map(x=>(x._1,Vectors.dense(x._2))).toDF("label","features")
 
 
@@ -104,7 +104,7 @@ object specialSimilarityTrain {
     val predictions = model.transform(predict_pairs).select("pairs","probability").map{line =>
       val score = line.get(1).toString.split('[')(1).split(']')(0).split(',')(1).toDouble
       (line.get(0).toString.split('_')(0),line.get(0).toString.split('_')(1),score)
-    }.map(x => (x._1.toInt,(x._2,x._3))).groupByKey().flatMap{x =>
+    }.map(x => (x._1,(x._2,x._3))).rdd.groupByKey().flatMap{x =>
       val resultK = 18
       val specialid = x._1
       val recommendSpecial = x._2.toSeq.sortWith(_._2 > _._2)
@@ -124,6 +124,7 @@ object specialSimilarityTrain {
         (specialid,line._1,line._2)
       }
     }
+
     //输出
     val hadoopConf = new org.apache.hadoop.conf.Configuration()
     val hdfs = org.apache.hadoop.fs.FileSystem.get(hadoopConf)
