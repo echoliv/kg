@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="special_rf_1">
+    <output-path>$PROJECT_DIR$/out/artifacts/special_rf_1</output-path>
+    <root id="archive" name="newsongtrain.jar">
+      <element id="module-output" name="newsongtrain" />
+    </root>
+  </artifact>
+</component>
