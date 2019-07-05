@@ -1,4 +1,4 @@
-package similar_specialid
+package kugou
 
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.log4j.{Level, Logger}
@@ -10,8 +10,8 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.{SparkConf, SparkContext}
 
 /**
- * Created by bearlin on 2015/11/19.
- */
+  * Created by bearlin on 2015/11/19.
+  */
 object specialSimilarityTrain {
   def main(args: Array[String]){
     val conf = new SparkConf()
@@ -29,9 +29,9 @@ object specialSimilarityTrain {
     Logger.getLogger("org").setLevel(Level.ERROR)
     Logger.getLogger("akka").setLevel(Level.ERROR)
 
-   //读取训练数据
-   val sample_file = args(0)
-   val pairs_file = args(1)
+    //读取训练数据
+    val sample_file = args(0)
+    val pairs_file = args(1)
     //val sample_file = "/user/hive/warehouse/analyse.db/recommendation_specialsim_sample/*/*"
     //val pairs_file = "/user/hive/warehouse/analyse.db/recommendation_specialsim_pairs/dt=2016-10-08/*"
     //读取训练参数
@@ -42,21 +42,21 @@ object specialSimilarityTrain {
     //val tagCandidateFile = "/user/hive/warehouse/analyse.db/recommendation_specialsim_candidate/"
 
     //对训练数据进行处理，并进行下采样，再转化成dataframe
-  /*  val tagCandidate = sc.textFile(tagCandidateFile).map{line =>
-      val s = line.split('|')
-      (s(0).toInt,s(1).split(',').toList)
-    }
-   */
+    /*  val tagCandidate = sc.textFile(tagCandidateFile).map{line =>
+        val s = line.split('|')
+        (s(0).toInt,s(1).split(',').toList)
+      }
+     */
 
 
 
     val trainingSamples = sc.textFile(sample_file).map{ line =>
       val s = line.split('|')
-      val colle = s(2).split(',').map(x => x).toList
+      val colle = s(2).split(',').map(x => x.toInt).toList
       var label = 0.0
       var mark = 1.0
       val r = scala.util.Random
-      if (colle.contains(s(3))){
+      if (colle.contains(s(3).toInt)){
         label = 1.0
       } else {
         label = 0.0
@@ -64,7 +64,7 @@ object specialSimilarityTrain {
           mark = 0.0
         }
       }
-      (label,s.slice(4, s.size).map(_.toDouble),mark,s(1),s(3))
+      (label,s.slice(4, s.size).map(_.toDouble),mark,s(1).toInt,s(3).toInt)
     }.filter(x => x._3==1.0).map(x=>(x._1,Vectors.dense(x._2))).toDF("label","features")
 
 
@@ -76,26 +76,26 @@ object specialSimilarityTrain {
     val labelIndexer = new StringIndexer().setInputCol("label").setOutputCol("indexedLabel").fit(trainingSamples)
 
     //多次训练并测试
-/*    var score_label = sc.parallelize(new Array[(Double, Double)](0))
-    for(nfold <- 1 to 1){
-      val Array(trainingData, testData) = trainingSamples.randomSplit(Array(0.7, 0.3))
-      val rf = new RandomForestClassifier().setLabelCol("indexedLabel").setFeaturesCol("indexedFeatures").setNumTrees(100).setMaxDepth(10).setImpurity("entropy")
-      val pipeline = new Pipeline().setStages(Array(labelIndexer, featureIndexer, rf))
-      val model = pipeline.fit(trainingData)
-      val predictions = model.transform(testData)
-      val score_label_tmp = predictions.select("probability","label").map{x=>
-        val score = x.get(0).toString.split('[')(1).split(']')(0).split(',')(1).toDouble
-        val label = x.getDouble(1)
-        (score, label)
-      }
-      score_label = score_label.union(score_label_tmp)
-    }
-    //求auc
-    val metrics = new BinaryClassificationMetrics(score_label,100)
-    val auc = metrics.areaUnderROC()
-    val roc = metrics.roc
-    roc.collect.foreach(x=>println(x._1.toString+'|'+x._2.toString))
-*/
+    /*    var score_label = sc.parallelize(new Array[(Double, Double)](0))
+        for(nfold <- 1 to 1){
+          val Array(trainingData, testData) = trainingSamples.randomSplit(Array(0.7, 0.3))
+          val rf = new RandomForestClassifier().setLabelCol("indexedLabel").setFeaturesCol("indexedFeatures").setNumTrees(100).setMaxDepth(10).setImpurity("entropy")
+          val pipeline = new Pipeline().setStages(Array(labelIndexer, featureIndexer, rf))
+          val model = pipeline.fit(trainingData)
+          val predictions = model.transform(testData)
+          val score_label_tmp = predictions.select("probability","label").map{x=>
+            val score = x.get(0).toString.split('[')(1).split(']')(0).split(',')(1).toDouble
+            val label = x.getDouble(1)
+            (score, label)
+          }
+          score_label = score_label.union(score_label_tmp)
+        }
+        //求auc
+        val metrics = new BinaryClassificationMetrics(score_label,100)
+        val auc = metrics.areaUnderROC()
+        val roc = metrics.roc
+        roc.collect.foreach(x=>println(x._1.toString+'|'+x._2.toString))
+    */
     //构建随机森林并进行训练
     val rf = new RandomForestClassifier().setLabelCol("indexedLabel").setFeaturesCol("features").setNumTrees(100).setMaxDepth(15).setImpurity("entropy")
     val pipeline = new Pipeline().setStages(Array(labelIndexer, rf))
@@ -104,7 +104,7 @@ object specialSimilarityTrain {
     val predictions = model.transform(predict_pairs).select("pairs","probability").map{line =>
       val score = line.get(1).toString.split('[')(1).split(']')(0).split(',')(1).toDouble
       (line.get(0).toString.split('_')(0),line.get(0).toString.split('_')(1),score)
-    }.map(x => (x._1,(x._2,x._3))).rdd.groupByKey().flatMap{x =>
+    }.map(x => (x._1.toInt,(x._2,x._3))).rdd.groupByKey().flatMap{x =>
       val resultK = 18
       val specialid = x._1
       val recommendSpecial = x._2.toSeq.sortWith(_._2 > _._2)
@@ -124,7 +124,6 @@ object specialSimilarityTrain {
         (specialid,line._1,line._2)
       }
     }
-
     //输出
     val hadoopConf = new org.apache.hadoop.conf.Configuration()
     val hdfs = org.apache.hadoop.fs.FileSystem.get(hadoopConf)
