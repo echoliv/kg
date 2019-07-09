@@ -1,4 +1,4 @@
-package similar_specialid
+package kugou
 
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.log4j.{Level, Logger}
@@ -6,17 +6,22 @@ import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.RandomForestClassifier
 import org.apache.spark.ml.feature.{StringIndexer, VectorIndexer}
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
-//import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.{SparkConf, SparkContext}
 
 /**
-  * Created by echoliv on 2019/07/02.
+  * Created by bearlin on 2015/11/19.
   */
-object specialTrain_temp {
+object specialSimilarityTrain {
   def main(args: Array[String]){
-    System.setProperty("hadoop.home.dir", "D:\\hadoop-2.7.7")
-    val conf = new SparkConf().setAppName("k-means").setMaster("local").set("spark.driver.allowMultipleContexts", "true")
+    val conf = new SparkConf()
+      .setAppName("specialSimilarityTrain")
+      .set("spark.rdd.compress", "true")
+      .set("spark.storage.memoryFraction", "0.2")
+      .set("spark.executor.cores", "2")
+      .set("spark.default.parallelism", "320")
+      .set("spark.shuffle.safetyFraction", "0.5")
+      .set("spark.executor.extraJavaOptions","-XX:+UseParNewGC -XX:+UseConcMarkSweepGC -XX:PermSize=256M -XX:MaxPermSize=256M")
     val sc = new SparkContext(conf)
     val sqlContext = new org.apache.spark.sql.SQLContext(sc)
     import sqlContext.implicits._
@@ -25,12 +30,12 @@ object specialTrain_temp {
     Logger.getLogger("akka").setLevel(Level.ERROR)
 
     //读取训练数据
-    val sample_file = "file\\special2"
-    val pairs_file = "file\\special1"
+    val sample_file = args(0)
+    val pairs_file = args(1)
     //val sample_file = "/user/hive/warehouse/analyse.db/recommendation_specialsim_sample/*/*"
     //val pairs_file = "/user/hive/warehouse/analyse.db/recommendation_specialsim_pairs/dt=2016-10-08/*"
     //读取训练参数
-    val resultFile = "file\\special"
+    val resultFile = args(2)
     //val tagCandidateFile = args(3)
 
     //val resultFile = "/user/hive/warehouse/analyse.db/recommendSpecial/"
@@ -47,11 +52,11 @@ object specialTrain_temp {
 
     val trainingSamples = sc.textFile(sample_file).map{ line =>
       val s = line.split('|')
-      val colle = s(2).split(',').map(x => x.toString).toList
+      val colle = s(2).split(',').map(x => x.toInt).toList
       var label = 0.0
       var mark = 1.0
       val r = scala.util.Random
-      if (colle.contains(s(3).toString)){
+      if (colle.contains(s(3).toInt)){
         label = 1.0
       } else {
         label = 0.0
@@ -59,7 +64,7 @@ object specialTrain_temp {
           mark = 0.0
         }
       }
-      (label,s.slice(4, s.size).map(_.toDouble),mark.toInt)
+      (label,s.slice(4, s.size).map(_.toDouble),mark,s(1).toInt,s(3).toInt)
     }.filter(x => x._3==1.0).map(x=>(x._1,Vectors.dense(x._2))).toDF("label","features")
 
 
