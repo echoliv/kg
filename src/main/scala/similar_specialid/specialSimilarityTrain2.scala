@@ -52,7 +52,6 @@ object specialSimilarityTrain {
      */
 
 
-
     val trainingSamples = sc.textFile(sample_file).map{ line =>
       val s = line.split('|')
       val colle = s(2).split(',').map(x => x).toList
@@ -63,48 +62,72 @@ object specialSimilarityTrain {
         label = 1.0
       } else {
         label = 0.0
-        if(r.nextFloat>0.1){
-          mark = 0.0
-        }
+        //        if(r.nextFloat>0.1){
+        //          mark = 0.0
+        //        }
       }
-      (label,s.slice(4, s.size).map(_.toDouble),mark,s(1),s(3))
+      (label,s.slice(4, s.size-1).map(_.toDouble),mark)
     }.filter(x => x._3==1.0).map(x=>(x._1,Vectors.dense(x._2))).toDF("label","features")
 
-
-    val predict_pairs = sc.textFile(pairs_file).map{ line =>
+    val predict_pair = sc.textFile(pairs_file).map{ line =>
       val s = line.split('|')
-      (s(0) + '_' + s(1),s.slice(2, s.size).map(_.toDouble))
+      (s(0) + '_' + s(1),s.slice(2, s.size-1).map(_.toDouble))
     }.map(x=>(x._1,Vectors.dense(x._2))).toDF("pairs","features")
-    //对类标和特征进行编码，变成pipleline可读取的格式
-    val labelIndexer = new StringIndexer().setInputCol("label").setOutputCol("indexedLabel").fit(trainingSamples)
 
-    //多次训练并测试
-    /*    var score_label = sc.parallelize(new Array[(Double, Double)](0))
-        for(nfold <- 1 to 1){
-          val Array(trainingData, testData) = trainingSamples.randomSplit(Array(0.7, 0.3))
-          val rf = new RandomForestClassifier().setLabelCol("indexedLabel").setFeaturesCol("indexedFeatures").setNumTrees(100).setMaxDepth(10).setImpurity("entropy")
-          val pipeline = new Pipeline().setStages(Array(labelIndexer, featureIndexer, rf))
-          val model = pipeline.fit(trainingData)
-          val predictions = model.transform(testData)
-          val score_label_tmp = predictions.select("probability","label").map{x=>
-            val score = x.get(0).toString.split('[')(1).split(']')(0).split(',')(1).toDouble
-            val label = x.getDouble(1)
-            (score, label)
-          }
-          score_label = score_label.union(score_label_tmp)
-        }
-        //求auc
-        val metrics = new BinaryClassificationMetrics(score_label,100)
-        val auc = metrics.areaUnderROC()
-        val roc = metrics.roc
-        roc.collect.foreach(x=>println(x._1.toString+'|'+x._2.toString))
+
+    //对类标和特征进行编码，变成pipleline可读取的格式
+    val data = trainingSamples
+    val labelIndexer = new StringIndexer().setInputCol("label").setOutputCol("indexedLabel").fit(trainingSamples)
+    val featureIndexer = new VectorIndexer().setInputCol("features").setOutputCol("indexedFeatures").setMaxCategories(2).fit(trainingSamples)
+
+    // Split the data into training and test sets (30% held out for testing).
+
+    // Train a RandomForest model.
+    val rf = new RandomForestClassifier()
+      .setLabelCol("indexedLabel")
+      .setFeaturesCol("indexedFeatures")
+      .setNumTrees(100).setMaxDepth(10).setImpurity("entropy")
+
+    // Convert indexed labels back to original labels.
+
+    // Chain indexers and forest in a Pipeline.
+    val pipeline = new Pipeline()
+      .setStages(Array(labelIndexer, featureIndexer, rf))
+
+    // Train model. This also runs the indexers.
+    val model = pipeline.fit(data)
+    /*
+        val labelIndexer = new StringIndexer().setInputCol("label").setOutputCol("indexedLabel").fit(trainingSamples)
+        val featureIndexer = new VectorIndexer().setInputCol("features").setOutputCol("indexedFeatures").setMaxCategories(2).fit(trainingSamples)
+        //多次训练并测试
+        /*    var score_label = sc.parallelize(new Array[(Double, Double)](0))
+            for(nfold <- 1 to 1){
+              val Array(trainingData, testData) = trainingSamples.randomSplit(Array(0.7, 0.3))
+              val rf = new RandomForestClassifier().setLabelCol("indexedLabel").setFeaturesCol("indexedFeatures").setNumTrees(100).setMaxDepth(10).setImpurity("entropy")
+              val pipeline = new Pipeline().setStages(Array(labelIndexer, featureIndexer, rf))
+              val model = pipeline.fit(trainingData)
+              val predictions = model.transform(testData)
+              val score_label_tmp = predictions.select("probability","label").map{x=>
+                val score = x.get(0).toString.split('[')(1).split(']')(0).split(',')(1).toDouble
+                val label = x.getDouble(1)
+                (score, label)
+              }
+              score_label = score_label.union(score_label_tmp)
+            }
+            //求auc
+            val metrics = new BinaryClassificationMetrics(score_label,100)
+            val auc = metrics.areaUnderROC()
+            val roc = metrics.roc
+            roc.collect.foreach(x=>println(x._1.toString+'|'+x._2.toString))
+        */
+        //构建随机森林并进行训练
+        val rf = new RandomForestClassifier().setLabelCol("indexedLabel").setFeaturesCol("featureIndexer").setNumTrees(100).setMaxDepth(15).setImpurity("entropy")
+        val pipeline = new Pipeline().setStages(Array(labelIndexer, featureIndexer,rf))
+        val model = pipeline.fit(trainingSamples)
+        //对候选对进行预测，并使用标签集进行过滤
     */
-    //构建随机森林并进行训练
-    val rf = new RandomForestClassifier().setLabelCol("indexedLabel").setFeaturesCol("features").setNumTrees(100).setMaxDepth(15).setImpurity("entropy")
-    val pipeline = new Pipeline().setStages(Array(labelIndexer, rf))
-    val model = pipeline.fit(trainingSamples)
-    //对候选对进行预测，并使用标签集进行过滤
-    val predictions = model.transform(predict_pairs).select("pairs","probability").map{line =>
+
+    val predictions = model.transform(predict_pair).select("pairs","probability").map{line =>
       val score = line.get(1).toString.split('[')(1).split(']')(0).split(',')(1).toDouble
       (line.get(0).toString.split('_')(0),line.get(0).toString.split('_')(1),score)
     }.map(x => (x._1.toString,(x._2,x._3))).rdd.groupByKey().flatMap{x =>
