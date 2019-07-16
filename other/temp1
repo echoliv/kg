@@ -1,0 +1,151 @@
+# coding: utf-8
+from __future__ import division
+from datetime import timedelta
+import numpy as np
+import xgboost as xgb
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import roc_auc_score
+import pandas as pd
+
+import auc_storage
+from file_utils import *
+from model_eval import *
+from read_data import ReadData
+
+class ModelTrain(object):
+    def __init__(self, conf, logger):
+        self.logger = logger
+        self.data_path = "/data5/bertguan/update_day/ctr_data/"
+        self.model_path = "/data5/bertguan/update_day/model/"
+        self.auc_path = "/data5/bertguan/update_day/auc/"
+        self.read_data = ReadData()
+        self.dt = None
+        self.train_data = None
+        self.clean_data = None
+        self.model_file = None
+        self.is_online = 0
+        self.is_rank = None
+        self.sample_num = None
+        self.feature_num = None
+        self.parm = {}
+        self.model_name = None
+        self.auc_filename = None
+        self.is_train_finish = False
+        self.init(conf)
+        self.auc_sto = None
+
+    def init(self, conf):
+        self.model_name = conf.model_conf["model_name"]
+        self.dt = conf.model_conf["dt"]
+        self.get_train_data(conf)
+        dt_clean = datetime.datetime.strptime(self.dt, '%Y%m%d') - timedelta(days=1)
+        dt_clean_str = dt_clean.strftime('%Y%m%d')
+        self.clean_data = "%s%s.%s" % (self.data_path, conf.model_conf["train_data"], dt_clean_str)
+        self.model_file = "%sxgb_%s_%s" % (self.model_path, conf.model_conf["model_name"], conf.model_conf["dt"])
+        self.is_online = conf.model_conf["is_online"]
+        self.feature_num = conf.model_conf["feature_num"]
+        self.sample_num = conf.model_conf["sample_num"] * 10000
+        self.auc_filename = "%s%s" % (self.auc_path, conf.model_conf["model_name"])
+        self.is_rank = conf.model_conf["is_rank"]
+        if not conf.model_conf["is_update"] == 1:
+            self.is_train_finish = True
+        self.set_parm(conf.parm_conf)
+
+    def get_train_data(self, conf):
+        days = conf.model_conf['days']
+        self.train_data = []
+        for i in range(days):
+            dt_day = datetime.datetime.strptime(self.dt, '%Y%m%d') - timedelta(days=i)
+            train_data = "%s%s.%s" % (self.data_path, conf.model_conf["train_data"], dt_day.strftime('%Y%m%d'))
+            self.train_data.append(train_data)
+
+    def set_parm(self, parm_conf):
+        param = {}
+        param['eta'] = 0.3  # learning_rate
+        param['n_estimators'] = 500  # num_boost_round
+        param['tree_method'] = "gpu_hist"
+        param['n_gpus'] = 8
+        param['max_depth'] = 5
+        param['min_child_weight'] = 4
+        param['gamma'] = 0.5
+        param['subsample'] = 0.6
+        param['colsample_bytree'] = 0.9
+        param['scale_pos_weight'] = 1
+        param['alpha'] = 1e-05  # reg_alpha
+        param['lambda'] = 1  # reg_lambda
+        param['seed'] = 0
+        param['silent'] = 1
+        param['objective'] = "binary:logistic"
+        for k, v in parm_conf.items():
+            param[k] = v
+        self.parm = param
+
+    def is_data_ready(self):
+        for train_data in self.train_data:
+            if not is_exit_file(train_data):
+                return False
+        return True
+
+    @staticmethod
+    def get_free_memory():
+        cmd = "free -m | grep + | awk '{print $4}'"
+        str_result = os.popen(cmd).read()
+        str_result = str_result.strip()
+        return int(str_result)
+
+    def train(self):
+        if is_exit_file(self.model_file):
+            self.logger.info("model %s exist" % self.model_file)
+            # self.is_train_finish = True
+            # return
+        free_mem = ModelTrain.get_free_memory()
+        if free_mem < 75000:
+            self.logger.error("no enough free memory: %d" % free_mem)
+            return
+        self.set_auc_alarm()
+        self.logger.info("train model %s use data %s" % (self.model_file, self.train_data))
+        if self.is_rank == 0:
+            self.train_model_weight()
+        else:
+            self.train_model_rank()
+        self.logger.info("train model %s finish" % self.model_file)
+        self.is_train_finish = True
+        # self.clean_file()
+
+    def clean_file(self):
+        if is_exit_file(self.clean_data):
+            cmd = "rm -f %s" % self.clean_data
+            self.logger.info(cmd)
+            os.popen(cmd)
+        return
+
+    def set_auc_alarm(self):
+        self.auc_sto = auc_storage.AucStorage(self.auc_filename)
+        self.auc_sto.set_alarm_title("猜你喜欢点击率预估%s模型" % self.model_name)
+        if self.is_online:
+            self.auc_sto.set_alarm_receivers(['jinhaoou', 'ethanwang', 'gemanzhang', 'steventan',
+                                              'bertguan', 'jiamingliu', 'huiyunluo', 'weitian'])
+
+    def test_model(self, df):
+        df['r'] = df['pre'].groupby(df['user_id']).rank(ascending=False)
+        total = df[df.r == 2].pre.count()
+        correct = df[(df.r == 1) & (df.label == 1)].pre.count()
+        auc = correct / total
+        print
+        total, auc
+        return auc
+
+    def train_model_weight(self):
+        # self.logger.info("read train file: " + self.train_data)
+        dtrain = self.read_data.read_xgb_train_data(self.train_data, self.sample_num, self.feature_num, 30)
+        # self.logger.info("read train file finish")
+        self.logger.info("binary model train_start: about 2-3 mintues...")
+        bst = xgb.train(self.parm, dtrain, int(self.parm['n_estimators']))
+        bst.save_model(self.model_file)
+        test_file = 'ctr_data/special_samples_addv2.20190715'
+        model_eval = ModelEval(test_file, self.model_file)
+        df = model_eval.read_test_data(200000)
+        auc_binary = model_eval.compute_binary_auc(df)
+        auc_weighted = model_eval.compute_weighed_auc(df, 50000)
+        self.logger.info("binary auc: %.6f weighted auc: %.6f" % (auc_binary, auc_weighted))

@@ -65,7 +65,7 @@ object specialSimilarityTrain2 {
 //          mark = 0.0
 //        }
       }
-      (label,s.slice(4, s.size-1).map(_.toDouble),mark)
+      (label,s.slice(4, s.size).map(_.toDouble),mark)
     }.filter(x => x._3==1.0).map(x=>(x._1,Vectors.dense(x._2))).toDF("label","features")
 
     val predict_pair = sc.textFile(pairs_file).map{ line =>
@@ -79,19 +79,14 @@ object specialSimilarityTrain2 {
     val labelIndexer = new StringIndexer().setInputCol("label").setOutputCol("indexedLabel").fit(trainingSamples)
     val featureIndexer = new VectorIndexer().setInputCol("features").setOutputCol("indexedFeatures").setMaxCategories(2).fit(trainingSamples)
 
-    // Split the data into training and test sets (30% held out for testing).
-
     // Train a RandomForest model.
     val rf = new RandomForestClassifier()
       .setLabelCol("indexedLabel")
-      .setFeaturesCol("indexedFeatures")
+      .setFeaturesCol("features")
       .setNumTrees(100).setMaxDepth(10).setImpurity("entropy")
 
-    // Convert indexed labels back to original labels.
-
-    // Chain indexers and forest in a Pipeline.
     val pipeline = new Pipeline()
-      .setStages(Array(labelIndexer, featureIndexer, rf))
+      .setStages(Array(labelIndexer, rf))
 
     // Train model. This also runs the indexers.
     val model = pipeline.fit(data)

@@ -1,0 +1,100 @@
+import pandas as pd
+import numpy as np
+import xgboost as xgb
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import roc_auc_score
+from sklearn import preprocessing
+from sklearn.model_selection import GridSearchCV
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn import cross_validation
+from sklearn.preprocessing import LabelEncoder
+from read_data import ReadData
+
+class ModelTrain(object):
+    def __init__(self, conf, logger):
+        self.logger = logger
+        self.data_path = "/data2/liulu/rec_special/ctr_data/"
+        self.model_path = "/data2/liulu/rec_special/model/"
+        self.auc_path = "/data2/liulu/rec_special/auc/"
+        self.read_data = ReadData()
+        self.dt = None
+        self.train_data = None
+        self.clean_data = None
+        self.model_file = None
+        self.is_online = 0
+        self.is_rank = None
+        self.sample_num = None
+        self.feature_num = None
+        self.parm = {}
+        self.model_name = None
+        self.auc_filename = None
+        self.is_train_finish = False
+        self.init(conf)
+        self.auc_sto = None
+
+    def set_parm(self, parm_conf):
+        param = {}
+        param['eta'] = 0.3  # learning_rate
+        param['n_estimators'] = 500  # num_boost_round
+        param['tree_method'] = "gpu_hist"
+        param['n_gpus'] = 8
+        param['max_depth'] = 5
+        param['min_child_weight'] = 4
+        param['gamma'] = 0.5
+        param['subsample'] = 0.6
+        param['colsample_bytree'] = 0.9
+        param['scale_pos_weight'] = 1
+        param['alpha'] = 1e-05  # reg_alpha
+        param['lambda'] = 1  # reg_lambda
+        param['seed'] = 0
+        param['silent'] = 1
+        param['objective'] = "binary:logistic"
+        for k, v in parm_conf.items():
+            param[k] = v
+        self.parm = param
+
+    def train_model(self):
+        self.logger.info("read train file: " + self.train_data)
+        X = []
+        Y = []
+        with open(self.train_data, 'r') as fo:
+            tmpLine = fo.readline()
+            while tmpLine != '':
+                s = tmpLine.split('\n')[0].split('\t')
+                label = int(s[1])
+                features = [float(x) for x in s[2].split('=')]
+                X.append(np.array(features))
+                Y.append(label)
+                tmpLine = fo.readline()
+        self.logger.info("read train file finish")
+        X = np.array(X)
+        Y = np.array(Y)
+        self.logger.info("convert np array finish")
+
+        if len(X) == 0 or len(X[0]) != self.feature_num:
+            self.auc_sto.get_switcher().set(False)
+            self.auc_sto.send_alarm("点击预估数据已被停止更新")
+            if len(X) == 0:
+                self.logger.error("empty X")
+            else:
+                self.logger.error("invalid dimension: %d" % len(X[0]))
+            return
+        tr_dat, tt_dat, trls, ttls = train_test_split(X, Y, test_size=0.1, random_state=0)
+        del X
+        del Y
+        self.logger.info("begin convert to dmatrix...")
+        dtrain = xgb.DMatrix(tr_dat, trls)
+        dtest = xgb.DMatrix(tt_dat, ttls)
+        self.logger.info("binary model train_start: about 2-3 mintues...")
+        bst = xgb.train(self.parm, dtrain, int(self.parm['n_estimators']))
+        pred_prob = bst.predict(dtest)
+        auc = roc_auc_score(ttls, pred_prob)
+        self.logger.info('auc:' + str(auc))
+        self.auc_sto.add(auc)
+        self.auc_sto.save()
+        bst.save_model(self.model_file)
