@@ -30,6 +30,7 @@ object special_feature {
       config("spark.executor.extraJavaOptions", "-Xloggc:/data1/app/spark_executor_gc_logs/executorGC.log -verbose:gc -XX:+UseGCLogFileRotation -XX:NumberOfGCLogFiles=10 -XX:GCLogFileSize=100m -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+UseParNewGC -XX:+UseConcMarkSweepGC -XX:NewRatio=4 -XX:NewRatio=4  -XX:CMSFullGCsBeforeCompaction=5 -XX:+UseCMSCompactAtFullCollection").
       enableHiveSupport().
       getOrCreate()
+
     val sc = spark.sparkContext
     import spark.implicits._
 
@@ -52,14 +53,12 @@ object special_feature {
 
 
     favorHistory.take(3).foreach(println)
-    favorHistory.persist()
 
     // songId|songFeature
     val songFeature = sc.textFile(songFeaturePath).map {
       x =>
         (x.split('|')(0), x.split('|')(1).split('=').map(e => e.toDouble))
     }.collectAsMap()
-
 
     // 获取歌曲特征的size
     songFeature.take(10).foreach(println)
