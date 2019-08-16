@@ -2,7 +2,6 @@
 //歌曲特征平移
 package similar_specialid
 
-import org.apache.log4j.{Level, Logger}
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.{SparkConf, SparkContext}
@@ -10,7 +9,7 @@ import org.jblas.DoubleMatrix
 import Array._
 
 
-object special_feature {
+object special_feature_temp1 {
 
   def arr_format(arr: Array[Double]): String = {
     arr.map(x=>
@@ -26,27 +25,17 @@ object special_feature {
   }
 
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder().appName("special_feature").
-      config("spark.rdd.compress", "true").
-      config("spark.yarn.executor.memoryOverhead", "4000").
-      config("spark.yarn.driver.memoryOverhead", "6000").
-      config("spark.executor.cores", "3").
-      config("spark.driver.maxResultSize", "2000").
-      config("spark.default.parallelism", "1000").
-      config("spark.executor.extraJavaOptions", "-Xloggc:/data1/app/spark_executor_gc_logs/executorGC.log -verbose:gc -XX:+UseGCLogFileRotation -XX:NumberOfGCLogFiles=10 -XX:GCLogFileSize=100m -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+UseParNewGC -XX:+UseConcMarkSweepGC -XX:NewRatio=4 -XX:NewRatio=4  -XX:CMSFullGCsBeforeCompaction=5 -XX:+UseCMSCompactAtFullCollection").
-      enableHiveSupport().
-      getOrCreate()
 
-    val sc = spark.sparkContext
-    import spark.implicits._
+    System.setProperty("hadoop.home.dir", "D:\\hadoop-2.7.7");
+    val conf = new SparkConf().setAppName("k-means").setMaster("local").set("spark.driver.allowMultipleContexts", "true");
+    val sc = new SparkContext(conf)
 
-    println(args.mkString("\n"))
 
-    val dt = args(0)
-    val songFeaturePath = args(1)
-    val songList = args(2)
-    val special_feature_table = args(3)
-
+    val dt = "2019-08-13"
+    val songFeaturePath = "file\\songfeature"
+    val songList = "file\\specialsong"
+    val special_feature_table = "file\\specialfeature"
+    val input_path ="file\\specialtemp"
 
     val favorHistory = sc.textFile(songList).
       map {
@@ -90,7 +79,7 @@ object special_feature {
 
         var feature = DoubleMatrix.zeros(songFeatureLength)
         for ((songId) <- songAndScoreList) {
-          //          val songId =songAndScoreList(i)
+//          val songId =songAndScoreList(i)
           val songFeature = new DoubleMatrix(songFeature_b.value.getOrElse(songId, DoubleMatrix.zeros(songFeatureLength).toArray))
           feature = songFeature.add(feature)
         }
@@ -100,26 +89,15 @@ object special_feature {
         (specialId, f)
     }
 
-    specialFeature.toDF("special_id", "specialid_features").createOrReplaceTempView("tmp")
-    val sql_insert =
-      """
-        insert overwrite table %s partition (dt='%s')
-          select special_id, specialid_features
-          from tmp
-      """.format(special_feature_table, dt)
-    spark.sql(sql_insert)
-    /*
-
     val hadoopConf = new org.apache.hadoop.conf.Configuration()
     val hdfs = org.apache.hadoop.fs.FileSystem.get(hadoopConf)
     try {
-      hdfs.delete(new org.apache.hadoop.fs.Path(special_feature_table), true)
+      hdfs.delete(new org.apache.hadoop.fs.Path(input_path), true)
     } catch {
       case _: Throwable => {}
     }
 
-    specialFeature.map(x => (x._1+'|'+x._2)).saveAsTextFile(special_feature_table)
-    */
+    specialFeature.map(x => (x._1+'|'+x._2)).saveAsTextFile(input_path)
   }
 }
 
