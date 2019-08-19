@@ -3,9 +3,11 @@
 package similar_specialid
 
 import org.apache.hadoop.io.compress.GzipCodec
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.{SparkConf, SparkContext}
 import org.jblas.DoubleMatrix
+
 import Array._
 
 
@@ -30,64 +32,56 @@ object special_feature_temp1 {
     val conf = new SparkConf().setAppName("k-means").setMaster("local").set("spark.driver.allowMultipleContexts", "true");
     val sc = new SparkContext(conf)
 
-
+/*
     val dt = "2019-08-13"
     val songFeaturePath = "file\\songfeature"
     val songList = "file\\specialsong"
     val special_feature_table = "file\\specialfeature"
     val input_path ="file\\specialtemp"
 
-    val favorHistory = sc.textFile(songList).
-      map {
-        x =>
-          val userId = x.split('|')(0)
-          val songId = x.split('|')(1)
-          //val score = x.split('\t')(3)
-          (userId, songId )
-      }.reduceByKey((x, y) => x + "," + y)
+    val norm_features = args(1)
+    val savepath = args(2)
+*/
+    val sim_song_num = 9
+    val input_path = "file\\specialtemp"
+    val song_features = "file\\songfeature"
+    val special_features ="file\\specialfeature"
 
 
-    favorHistory.take(3).foreach(println)
 
-    // songId|songFeature
-    val songFeature = sc.textFile(songFeaturePath).map {
-      x =>
-        (x.split('|')(0), x.split('|')(1).split('=').map(e => e.toDouble))
-    }.collectAsMap()
+    val song_f = sc.textFile(song_features).map { line =>
+      val s =line.split('|')
+      val id =s(0)
+      val feature = s(1).split('=').map(_.toDouble)
+      val f_m = new DoubleMatrix(feature)
+      val norm = f_m.norm2()
+      (id,(norm,feature))
+    }.cache()
 
-    val temp = songFeature.take(1).map(x=> (x._1+'|'+x._2.mkString(",")))
-    temp.take(1).foreach(println)
-    // 获取歌曲特征的size
-    songFeature.take(10).foreach(println)
-    val songFeatureLength = songFeature.take(2).values.toList.head.length
-    println("=========================================================")
-    println(songFeatureLength)
+    val special_f = sc.textFile(special_features).map { line =>
+      val s =line.split('|')
+      val id =s(0)
+      val feature = s(1).split('=').map(_.toDouble)
+      val f_m = new DoubleMatrix(feature)
+      val norm = f_m.norm2()
+      (id,(norm,feature))
+    }.cache()
 
-    // 广播歌曲特征
-    val songFeature_b = sc.broadcast(songFeature)
+    val (ids,nf) = special_f.collect.unzip
+    val norms = new DoubleMatrix(nf.map(_._1))
+    val feature = new DoubleMatrix(nf.map(_._2))
+    val result_s = song_f.flatMap{x =>
+      val songid = x._1
+      val songnorm = x._2._1
+      val songfeature = new DoubleMatrix(x._2._2)
+      val cossims = feature.mmul(songfeature).mmul(1/songnorm).divColumnVector(norms)
 
-    // 计算歌单的特征
-    val specialFeature = favorHistory.map {
-      row =>
-        val specialId = row._1
-        val songAndScoreList = row._2
-          .split(',')
-          .map(e => e.toString)
-          .filter(e => songFeature_b.value.contains(e))
-
-        val countsong = songAndScoreList.length
-
-        var feature = DoubleMatrix.zeros(songFeatureLength)
-        for ((songId) <- songAndScoreList) {
-//          val songId =songAndScoreList(i)
-          val songFeature = new DoubleMatrix(songFeature_b.value.getOrElse(songId, DoubleMatrix.zeros(songFeatureLength).toArray))
-          feature = songFeature.add(feature)
-        }
-
-        feature = feature.mmul(1.0/countsong)
-        val f = arr_format(feature.toArray)
-        (specialId, f)
+      val sort_index = cossims.sortingPermutation().reverse
+      val recom_result_nofilter = sort_index.slice(0,sim_song_num).map{e=> (songid,ids(e),cossims.get(e))}
+      recom_result_nofilter
     }
+
+
 
     val hadoopConf = new org.apache.hadoop.conf.Configuration()
     val hdfs = org.apache.hadoop.fs.FileSystem.get(hadoopConf)
@@ -97,7 +91,9 @@ object special_feature_temp1 {
       case _: Throwable => {}
     }
 
-    specialFeature.map(x => (x._1+'|'+x._2)).saveAsTextFile(input_path)
+    result_s.map(x =>  (x._1+'|'+x._2+'|'+x._3)).saveAsTextFile(input_path)
+
+
   }
 }
 
