@@ -89,7 +89,7 @@ object song_recall_special {
 
     }
 */
-val (ids,nf) = special_f.collect.unzip
+    val (ids,nf) = special_f.collect.unzip
     val norms = new DoubleMatrix(nf.map(_._1))
     val feature = new DoubleMatrix(nf.map(_._2))
     val result_s = song_f.flatMap{x =>
