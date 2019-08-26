@@ -1,7 +1,7 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="Scala Script" type="ScalaScriptRunConfiguration" factoryName="Scala Script" editBeforeRun="true" singleton="true">
     <module name="newsongtrain" />
-    <setting name="path" value="$PROJECT_DIR$/src/main/scala/Everydayrecommend/get_user_feature_v2.scala" />
+    <setting name="path" value="$PROJECT_DIR$/src/main/scala/Everydayrecommend/every_ll/ll_gbdt_predict.scala" />
     <setting name="vmparams" value="" />
     <setting name="consoleargs" value="" />
     <setting name="params" value="" />

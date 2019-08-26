@@ -51,8 +51,6 @@ object train_gbdt_v3 {
     trainingData.take(1)
 
     val boostingStrategy = BoostingStrategy.defaultParams("Classification")
-
-
     boostingStrategy.numIterations = numIters
     boostingStrategy.treeStrategy.numClasses = 2
     boostingStrategy.treeStrategy.maxDepth = maxDepth

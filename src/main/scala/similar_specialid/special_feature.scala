@@ -66,7 +66,7 @@ object special_feature {
         (x.split('|')(0), x.split('|')(1).split('=').map(e => e.toDouble))
     }.collectAsMap()
 
-    val temp = songFeature.take(1).map(x=> (x._1+'|'+x._2.mkString(",")))
+    val temp = songFeature.take(1).map(x=> (x._1+'|'+x._2.mkString(",")) )
     temp.take(1).foreach(println)
     // 获取歌曲特征的size
     songFeature.take(10).foreach(println)
