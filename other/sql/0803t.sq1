@@ -1,0 +1,173 @@
+dal.oa_songlist_play_d  播放
+
+select t2.tag,sum(play),count(distinct(t2.global_collection_id))
+from
+(
+select special_id,sum(play_count) play
+from dal.oa_songlist_play_d where dt>='2019-08-25' group by special_id
+)t1 join
+(
+select specialid,global_collection_id,case when song_count <30 then '(0,30)'
+when song_count  between 30 and 50 then '[30,50]'
+when song_count  between 51 and 100 then '[51,100]'
+else '>100' end as tag from
+common.k_special_part
+where dt='2019-08-29'
+and specialid is not null
+group by specialid,global_collection_id,case when song_count <30 then '(0,30)'
+when song_count  between 30 and 50 then '[30,50]'
+when song_count  between 51 and 100 then '[51,100]'
+else '>100' end
+union all
+select global_collection_id as specialid,global_collection_id,case when song_count <30 then '(0,30)'
+when song_count  between 30 and 50 then '[30,50]'
+when song_count  between 51 and 100 then '[51,100]'
+else '>100' end as tag from
+common.k_special_part
+where dt='2019-08-29'
+and global_collection_id is not null
+group by global_collection_id,case when song_count <30 then '(0,30)'
+when song_count  between 30 and 50 then '[30,50]'
+when song_count  between 51 and 100 then '[51,100]'
+else '>100' end
+)t2 on t1.special_id=t2.specialid
+group by t2.tag;
+
+
+收藏
+
+select tag,count(*),count(distinct(y.global_collection_id)),count(distinct(i))
+from
+(
+select i,fo,sh,
+case when special_id rlike 'collection_2' then regexp_replace(special_id, '_[^_]+$','_0') else special_id end as special_id
+from
+ddl.dt_list_ard_d
+where dt >= '2019-08-25' and dt<'2019-08-30'
+and action in ('favor')
+and a in (12382)
+and length(special_id)>=3
+and cast(i as int)>=0
+and ((r='单曲' and ivar2='单选') or r='歌单')
+group by i,fo,sh,
+case when special_id rlike 'collection_2' then regexp_replace(special_id, '_[^_]+$','_0') else special_id end
+)x
+inner join
+(
+select specialid,global_collection_id,case when song_count <30 then '(0,30)'
+when song_count  between 30 and 50 then '[30,50]'
+when song_count  between 51 and 100 then '[51,100]'
+else '>100' end as tag from
+common.k_special_part
+where dt='2019-08-29'
+and specialid is not null
+group by specialid,global_collection_id,case when song_count <30 then '(0,30)'
+when song_count  between 30 and 50 then '[30,50]'
+when song_count  between 51 and 100 then '[51,100]'
+else '>100' end
+union all
+select global_collection_id as specialid,global_collection_id,case when song_count <30 then '(0,30)'
+when song_count  between 30 and 50 then '[30,50]'
+when song_count  between 51 and 100 then '[51,100]'
+else '>100' end as tag from
+common.k_special_part
+where dt='2019-08-29'
+and global_collection_id is not null
+group by global_collection_id,case when song_count <30 then '(0,30)'
+when song_count  between 30 and 50 then '[30,50]'
+when song_count  between 51 and 100 then '[51,100]'
+else '>100' end
+)y
+on x.special_id=y.specialid
+group by tag;
+
+
+曝光
+select t21.tag,count(*),count(distinct(global_collection_id)),count(distinct(i))
+from
+(
+select tag,i,global_collection_id
+from
+(
+select i,
+case when special_id rlike 'collection_2' then regexp_replace(special_id, '_[^_]+$','_0') else special_id end as special_id
+from
+ddl.dt_list_ard_d
+where dt >= '2019-08-25' and dt<'2019-08-30'
+and action in ('exposure')
+and a in (14124)
+and ft='单曲列表曝光'
+and r in ('歌单','首页歌单')
+and b='曝光'
+and cast(i as int)>0
+group by i,
+case when special_id rlike 'collection_2' then regexp_replace(special_id, '_[^_]+$','_0') else special_id end
+)x
+inner join
+(
+select specialid,global_collection_id,case when song_count <30 then '(0,30)'
+when song_count  between 30 and 50 then '[30,50]'
+when song_count  between 51 and 100 then '[51,100]'
+else '>100' end as tag from
+common.k_special_part
+where dt='2019-08-29'
+and specialid is not null
+group by specialid,global_collection_id,case when song_count <30 then '(0,30)'
+when song_count  between 30 and 50 then '[30,50]'
+when song_count  between 51 and 100 then '[51,100]'
+else '>100' end
+union all
+select global_collection_id as specialid,global_collection_id,case when song_count <30 then '(0,30)'
+when song_count  between 30 and 50 then '[30,50]'
+when song_count  between 51 and 100 then '[51,100]'
+else '>100' end as tag from
+common.k_special_part
+where dt='2019-08-29'
+and global_collection_id is not null
+group by global_collection_id,case when song_count <30 then '(0,30)'
+when song_count  between 30 and 50 then '[30,50]'
+when song_count  between 51 and 100 then '[51,100]'
+else '>100' end
+)y
+on x.special_id=y.specialid
+group by tag,i,global_collection_id
+)t21
+left join
+(
+select tag,userid,global_collection_id
+from
+(
+select userid,special_id
+from dsl.restruct_dwm_list_all_play_d where dt>='2019-08-25' and pt='android' and special_id<>'unknown'
+and length(special_id)>=3
+group by userid,special_id
+)t1 join
+(
+select specialid,global_collection_id,case when song_count <30 then '(0,30)'
+when song_count  between 30 and 50 then '[30,50]'
+when song_count  between 51 and 100 then '[51,100]'
+else '>100' end as tag from
+common.k_special_part
+where dt='2019-08-29'
+and specialid is not null
+group by specialid,global_collection_id,case when song_count <30 then '(0,30)'
+when song_count  between 30 and 50 then '[30,50]'
+when song_count  between 51 and 100 then '[51,100]'
+else '>100' end
+union all
+select global_collection_id as specialid,global_collection_id,case when song_count <30 then '(0,30)'
+when song_count  between 30 and 50 then '[30,50]'
+when song_count  between 51 and 100 then '[51,100]'
+else '>100' end as tag from
+common.k_special_part
+where dt='2019-08-29'
+and global_collection_id is not null
+group by global_collection_id,case when song_count <30 then '(0,30)'
+when song_count  between 30 and 50 then '[30,50]'
+when song_count  between 51 and 100 then '[51,100]'
+else '>100' end
+)t2 on t1.special_id=t2.specialid
+group by tag,userid,global_collection_id
+)t22 on (t21.i=t22.userid and t21.global_collection_id =t22.global_collection_id)
+where t22.global_collection_id is null and t22.userid is null
+group by t21.tag；
