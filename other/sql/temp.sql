@@ -101,3 +101,16 @@ from mini_dsl.zhongzhao_fm_songid_usercnt_rank
 where dt='2019-08-16'
 )t3 on t2.songid =t3.songid
 group by t3.ranktype
+
+select t2.specialid,t2.specialname,t2.song_count,t1.songid,t1.songname,t1.sort
+from
+(
+select * from common.k_special_song_part
+where dt='2019-08-29' and  sort>100  and is_publish=1
+)t1
+join
+(
+select specialid,specialname,song_count
+from common.k_special_part
+where dt='2019-08-28' and is_publish=1 and song_count<100
+)t2 on t1.specialid=t2.specialid  limit 10;
