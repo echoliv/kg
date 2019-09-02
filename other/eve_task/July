@@ -137,7 +137,86 @@
 大于100的播放占比是16% ，歌单数量占比是8%。而且大于100的歌单在单曲收藏量更多。(0,30)  23822811，82878；>100，12968810，13987
 
 29-30
-相似歌曲根据scid过滤灰度
+相似歌曲根据scid过滤灰度，播放提升了3%，人均播放和时长都有提高，其中有2万多的scid是有版权过滤，同时新增了5万多的scid。
 歌曲特征
 lightgbm算法
 统计不同歌单数量的歌单播放收藏情况
+在召回阶段做了相似歌单的去重，跟宇博讨论了一下是针对相似歌单
+
+9月
+2号
+统计用户对不同标签的歌单的播放情况
+长歌单的标签统计。
+分析：基础数据变化，推荐源、样本、噪音数据过滤
+select wm,count(*)
+(
+select i,sh,sn,wm
+from ddl.dt_list_ard_d
+where dt='2019-09-01'
+and sty='音频'
+and b='播放' and r='播放'
+and substring(i,-1)='1'
+)t1
+group by wm
+limit 20;
+
+
+select t1.i,t1.spt1/t2.spt2
+from
+(
+select i,sum(spt)/1000 spt1
+from
+ddl.dt_list_ard_d
+where dt='2019-09-01'
+and a = '12406' and fs = '1'
+and substring(i,-1)='1' group by i
+)t1 join
+(
+select i,sh,sn,wm,sum(spt)/1000 spt2
+from ddl.dt_list_ard_d
+where dt='2019-09-01'
+and sty='音频' and fs in ('完整播放','被终止')
+and b='播放' and r='播放' and action='play'
+and substring(i,-1)='1'  and tv>=7900
+)t2 on t1.i =t2.i
+
+
+select wm,fs,sum(geci),sum(favor)
+from
+(
+select t1.i,t1.sh,wm,fs,if(t2.i is null and t2.sh is null,0,1) geci,if(t3.user_id is null and t3.hash is null ,0,1) favor
+from
+(
+select i,sh,sn,wm,fs
+from ddl.dt_list_ard_d
+where dt='2019-09-01'
+and sty='音频' and action='play' and fs in ('完整播放','被终止')
+and b='播放' and r='播放' and action='play'
+and substring(i,-1)='1' and tv>=7900
+)t1
+left join
+(
+select i,sh from
+ddl.dt_list_ard_d
+where dt='2019-09-01'  and b='歌词曝光' and r='歌词曝光' and a='11375'
+and substring(i,-1)='1' and tv>=7900
+)t2 on (t1.i=t2.i and upper(trim(t1.sh)) = upper(trim(t2.sh)))
+left join
+(
+select user_id,hash from ddl.dt_list_archive_collect_d
+where dt='2019-09-01'  and data_type='1'
+and substring(user_id,-1)='1' and tv>=7900
+)t3 on (t1.i=t3.user_id and upper(trim(t1.sh)) = upper(trim(t3.hash)))
+group by
+t1.i,t1.sh,wm,fs,if(t2.i is null and t2.sh is null,0,1),if(t3.user_id is null and t3.hash is null ,0,1)
+)t21 group by wm,fs ;
+
+select tag,count(*)
+from
+(
+select i,case when timelength/playlength >0.8 then '>0.8'
+when timelength/playlength <=0.8 and timelength/playlength>0.5 then '(0.5,0.8]'
+when timelength/playlength <=0.2 and timelength/playlength>0.3 then '(0.3,0.5]'
+else '<0.2' end as tag
+from temp.ll_analyse_user_use_app_time_1
+)t1 group by tag
