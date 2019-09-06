@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="focus_time_seq_v2">
+    <output-path>$PROJECT_DIR$/out/artifacts/focus_time_seq_v2</output-path>
+    <root id="archive" name="newsongtrain.jar">
+      <element id="module-output" name="newsongtrain" />
+    </root>
+  </artifact>
+</component>
