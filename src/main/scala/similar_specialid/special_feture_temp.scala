@@ -104,6 +104,7 @@ object special_feature_temp {
       case _: Throwable => {}
     }
 
+    specialFeature.map(x=> x._1)
     specialFeature.map(x => (x._1+'|'+x._2)).saveAsTextFile(special_feature_table)
 
   }
